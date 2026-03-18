@@ -76,14 +76,24 @@ your-folder/
 
 ---
 
+## 已处理的兼容性问题
+
+| 问题 | 原因 | 脚本处理方式 |
+|------|------|--------------|
+| `Expected BOF record` 报错 | `.xls` 实际是 TSV/CSV 文本文件 | 自动检测文件头，分流处理 |
+| 日期列显示 `########` | 列宽太窄 | 自动调整所有列宽 |
+| 日期列显示为数字或无效数据 | date/time 对象缺少 Excel 格式 | 日期和时间直接写为文本字符串 |
+| `zsh: command not found: pip` | macOS 下命令是 `pip3` | 脚本内部用 `sys.executable -m pip` |
+| Python 版本仍为 3.9 | Xcode 自带 Python 覆盖了 Homebrew | 脚本提示添加 alias 的具体命令 |
+| `No module named 'xlrd'` | 切换 Python 版本后依赖丢失 | 脚本自动检测并安装缺失依赖 |
+
+---
+
 ## 运行示例
 
 ```
 $ python3 xls_to_xlsx.py "/Users/sly/Downloads/索尼HT-AN7"
 [检查] Python 版本: 3.11.15
-[检查] 缺少依赖: xlrd, openpyxl
-       正在自动安装...
-       ✅ 已自动安装: xlrd, openpyxl
 
 找到 3 个 .xls 文件，开始转换...
 输出目录: /Users/sly/Downloads/索尼HT-AN7/Convert
@@ -94,4 +104,23 @@ $ python3 xls_to_xlsx.py "/Users/sly/Downloads/索尼HT-AN7"
 
 完成: 3 成功, 0 失败
 文件已保存到: /Users/sly/Downloads/索尼HT-AN7/Convert
+```
+
+### 首次运行（依赖自动安装）
+
+```
+$ python3 xls_to_xlsx.py
+[检查] Python 版本: 3.11.15
+
+[检查] 缺少依赖: xlrd, openpyxl
+       正在自动安装...
+       ✅ 已自动安装: xlrd, openpyxl
+
+找到 1 个 .xls 文件，开始转换...
+输出目录: /Users/sly/Downloads/Convert
+
+  ✅ 2026-3-12_第一行理想.xls → 2026-3-12_第一行理想.xlsx  [Excel 二进制]
+
+完成: 1 成功, 0 失败
+文件已保存到: /Users/sly/Downloads/Convert
 ```

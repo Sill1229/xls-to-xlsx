@@ -52,7 +52,6 @@ def check_and_install_deps():
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError:
-        # 某些环境不支持 --break-system-packages，去掉再试
         try:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", *missing],
@@ -66,7 +65,6 @@ def check_and_install_deps():
             print(f"    python3 -m pip install {' '.join(missing)}")
             sys.exit(1)
 
-    # 安装后再次验证
     for pkg in missing:
         try:
             __import__(pkg)
@@ -148,12 +146,30 @@ def convert_xls_to_xlsx(xls_path, output_dir):
             for col in range(xls_sheet.ncols):
                 cell = xls_sheet.cell(row, col)
                 value = cell.value
+                xlsx_cell = xlsx_sheet.cell(row=row + 1, column=col + 1)
+
                 if cell.ctype == xlrd.XL_CELL_DATE:
                     try:
-                        value = xlrd.xldate_as_datetime(value, xls_book.datemode)
+                        dt_tuple = xlrd.xldate_as_tuple(value, xls_book.datemode)
+                        if dt_tuple[0] == 0 and dt_tuple[1] == 0 and dt_tuple[2] == 0:
+                            # 纯时间 → 写成文本 "HH:MM:SS"
+                            xlsx_cell.value = f"{dt_tuple[3]:02d}:{dt_tuple[4]:02d}:{dt_tuple[5]:02d}"
+                        else:
+                            # 有日期部分 → 写成文本 "YYYY-MM-DD"
+                            xlsx_cell.value = f"{dt_tuple[0]:04d}-{dt_tuple[1]:02d}-{dt_tuple[2]:02d}"
                     except Exception:
-                        pass
-                xlsx_sheet.cell(row=row + 1, column=col + 1, value=value)
+                        xlsx_cell.value = value
+                else:
+                    xlsx_cell.value = value
+
+        # 自动调整列宽
+        for col_cells in xlsx_sheet.columns:
+            max_len = 0
+            col_letter = col_cells[0].column_letter
+            for c in col_cells:
+                if c.value is not None:
+                    max_len = max(max_len, len(str(c.value)))
+            xlsx_sheet.column_dimensions[col_letter].width = max_len + 2
 
     xlsx_book.save(xlsx_path)
     return xlsx_path
