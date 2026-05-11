@@ -7,7 +7,24 @@
 
 ## 唯一前置条件：安装 Python 3
 
-macOS 用户打开终端执行：
+### Windows
+
+到 [python.org/downloads](https://www.python.org/downloads/) 下载 Python 3.11+ 安装包。
+
+> ⚠️ 安装时**务必勾选 “Add python.exe to PATH”**，否则命令行无法调用。
+
+验证（任选一条）：
+
+```cmd
+py --version
+python --version
+```
+
+显示 3.9+ 即可运行。
+
+### macOS
+
+打开终端执行：
 
 ```bash
 brew install python@3.11
@@ -25,19 +42,35 @@ brew install python@3.11
 python3 --version
 ```
 
-显示 3.9+ 即可运行。**其他依赖（xlrd、openpyxl）脚本会自动安装，无需手动操作。**
+显示 3.9+ 即可运行。
+
+---
+
+**其他依赖（xlrd、openpyxl）脚本会自动安装，无需手动操作。**
 
 ---
 
 ## 使用方法
 
-### 方式一：指定目录
+### Windows：双击 / 拖拽 `run.bat`（推荐）
+
+- **双击 `run.bat`** —— 处理 `run.bat` 所在目录下的所有 `.xls`
+- **把目标文件夹拖到 `run.bat` 图标上** —— 处理拖入目录下的所有 `.xls`
+- 命令行用法：
+
+  ```cmd
+  py xls_to_xlsx.py "C:\path\to\your\folder"
+  ```
+
+### macOS / Linux：命令行
+
+#### 方式一：指定目录
 
 ```bash
 python3 xls_to_xlsx.py "/path/to/your/folder"
 ```
 
-### 方式二：把脚本放到目标目录下直接运行
+#### 方式二：把脚本放到目标目录下直接运行
 
 ```bash
 cd /path/to/your/folder
@@ -86,6 +119,9 @@ your-folder/
 | `zsh: command not found: pip` | macOS 下命令是 `pip3` | 脚本内部用 `sys.executable -m pip` |
 | Python 版本仍为 3.9 | Xcode 自带 Python 覆盖了 Homebrew | 脚本提示添加 alias 的具体命令 |
 | `No module named 'xlrd'` | 切换 Python 版本后依赖丢失 | 脚本自动检测并安装缺失依赖 |
+| TSV/CSV 中文乱码（`?` 或 �） | 中文 Windows 导出的文件默认 GBK 编码，原脚本硬编码 UTF-8 | 按 utf-8-sig → utf-8 → gbk → gb18030 顺序自动回退 |
+| Windows 控制台显示 emoji / 中文乱码 | cmd 默认 GBK 代码页 | `run.bat` 中 `chcp 65001`，Python 端 `sys.stdout.reconfigure` 双保险 |
+| `python3` 在 Windows 上不存在 | Windows Python 安装包仅注册 `python.exe` 和 `py.exe` | `run.bat` 优先用 `py -3`，否则回退 `python` |
 
 ---
 

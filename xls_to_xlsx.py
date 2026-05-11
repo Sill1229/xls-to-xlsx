@@ -3,7 +3,9 @@
 批量将 .xls 文件转换为 .xlsx 格式
 支持真正的 Excel 二进制格式和伪装成 .xls 的 TSV/CSV 文本文件
 转换后的文件输出到源目录下的 Convert 文件夹
-用法: python3 xls_to_xlsx.py [目录路径]
+用法:
+    Windows : py xls_to_xlsx.py [目录路径]   或双击 / 拖拽 run.bat
+    macOS   : python3 xls_to_xlsx.py [目录路径]
 """
 
 import sys
@@ -12,21 +14,41 @@ import glob
 import csv
 import subprocess
 
+# 让脚本在 Windows 中文 cmd（GBK 代码页）下也能正常打印 emoji / 中文
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
 # ==============================================================
 # 环境自检
 # ==============================================================
 
-def check_python_version():
-    """检查 Python 版本"""
-    v = sys.version_info
-    print(f"[检查] Python 版本: {v.major}.{v.minor}.{v.micro}")
-    if v.major < 3 or (v.major == 3 and v.minor < 9):
+def _print_upgrade_hint():
+    if sys.platform == "win32":
+        print("\n⚠️  Python 版本过低，请到 https://www.python.org/downloads/ 下载并安装 3.11+")
+        print("    安装时务必勾选 “Add python.exe to PATH”")
+        print("    安装后重新打开命令行或双击 run.bat 即可")
+    elif sys.platform == "darwin":
         print("\n⚠️  Python 版本过低，建议升级到 3.11：")
         print("    brew install python@3.11")
         print('    echo \'alias python3="/opt/homebrew/opt/python@3.11/bin/python3.11"\' >> ~/.zshrc')
         print('    echo \'alias pip3="/opt/homebrew/opt/python@3.11/bin/pip3.11"\' >> ~/.zshrc')
         print("    source ~/.zshrc")
         print("\n    然后重新运行此脚本。")
+    else:
+        print("\n⚠️  Python 版本过低，请升级到 Python 3.9 或更高版本后重试。")
+
+
+def check_python_version():
+    """检查 Python 版本"""
+    v = sys.version_info
+    print(f"[检查] Python 版本: {v.major}.{v.minor}.{v.micro}")
+    if v.major < 3 or (v.major == 3 and v.minor < 9):
+        _print_upgrade_hint()
         sys.exit(1)
 
 
@@ -60,17 +82,19 @@ def check_and_install_deps():
             )
         except subprocess.CalledProcessError:
             print("\n❌ 自动安装失败，请手动执行：")
-            print(f"    pip3 install {' '.join(missing)}")
-            print("    或")
-            print(f"    python3 -m pip install {' '.join(missing)}")
+            if sys.platform == "win32":
+                print(f"    py -m pip install {' '.join(missing)}")
+            else:
+                print(f"    pip3 install {' '.join(missing)}")
+                print("    或")
+                print(f"    python3 -m pip install {' '.join(missing)}")
             sys.exit(1)
 
     for pkg in missing:
         try:
             __import__(pkg)
         except ImportError:
-            print(f"\n❌ {pkg} 安装后仍无法导入，请手动执行：")
-            print(f"    pip3 install {pkg}")
+            print(f"\n❌ {pkg} 安装后仍无法导入，请手动安装后重试。")
             sys.exit(1)
 
     print(f"       ✅ 已自动安装: {', '.join(missing)}")
@@ -88,15 +112,29 @@ import openpyxl
 # 转换逻辑
 # ==============================================================
 
+# 文本编码探测顺序：BOM 优先，再 UTF-8，再中文 Windows 常见编码
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "gbk", "gb18030")
+
+
 def is_real_xls(filepath):
     with open(filepath, "rb") as f:
         header = f.read(8)
     return header[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
-def detect_delimiter(filepath):
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        sample = f.read(4096)
+def read_text_with_fallback(filepath):
+    """按 TEXT_ENCODINGS 顺序尝试解码；都失败则用 utf-8 + replace 兜底。返回 (text, encoding)。"""
+    with open(filepath, "rb") as f:
+        raw = f.read()
+    for enc in TEXT_ENCODINGS:
+        try:
+            return raw.decode(enc), enc
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace"), "utf-8(replace)"
+
+
+def detect_delimiter(sample):
     tab_count = sample.count("\t")
     comma_count = sample.count(",")
     return "\t" if tab_count >= comma_count else ","
@@ -106,28 +144,28 @@ def convert_text_to_xlsx(filepath, output_dir):
     basename = os.path.splitext(os.path.basename(filepath))[0]
     xlsx_path = os.path.join(output_dir, f"{basename}.xlsx")
 
-    delimiter = detect_delimiter(filepath)
+    text, encoding = read_text_with_fallback(filepath)
+    delimiter = detect_delimiter(text[:4096])
     fmt = "TSV" if delimiter == "\t" else "CSV"
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sheet1"
 
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        reader = csv.reader(f, delimiter=delimiter)
-        for row_idx, row in enumerate(reader, 1):
-            for col_idx, value in enumerate(row, 1):
+    reader = csv.reader(text.splitlines(), delimiter=delimiter)
+    for row_idx, row in enumerate(reader, 1):
+        for col_idx, value in enumerate(row, 1):
+            try:
+                value = int(value)
+            except ValueError:
                 try:
-                    value = int(value)
+                    value = float(value)
                 except ValueError:
-                    try:
-                        value = float(value)
-                    except ValueError:
-                        pass
-                ws.cell(row=row_idx, column=col_idx, value=value)
+                    pass
+            ws.cell(row=row_idx, column=col_idx, value=value)
 
     wb.save(xlsx_path)
-    return xlsx_path, fmt
+    return xlsx_path, fmt, encoding
 
 
 def convert_xls_to_xlsx(xls_path, output_dir):
@@ -205,8 +243,8 @@ def main():
                 out = convert_xls_to_xlsx(xls_path, output_dir)
                 print(f"  ✅ {name} → {os.path.basename(out)}  [Excel 二进制]")
             else:
-                out, fmt = convert_text_to_xlsx(xls_path, output_dir)
-                print(f"  ✅ {name} → {os.path.basename(out)}  [实际为 {fmt} 文本]")
+                out, fmt, encoding = convert_text_to_xlsx(xls_path, output_dir)
+                print(f"  ✅ {name} → {os.path.basename(out)}  [实际为 {fmt} 文本, 编码 {encoding}]")
             success += 1
         except Exception as e:
             print(f"  ❌ {name} 失败: {e}")
